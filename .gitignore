@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 *.db
+app_settings.json
 .vscode/
 dist/
 build/
