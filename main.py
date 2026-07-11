@@ -22,10 +22,7 @@ TOPIC_LABELS = {
     QuestionGenerator.SUBTRACTION_TOPIC: "Atņemšana",
     QuestionGenerator.MULTIPLICATION_TOPIC: "Reizināšana",
     QuestionGenerator.DIVISION_TOPIC: "Dalīšana",
-    QuestionGenerator.MIXED_TOPIC: "Jaukts",
-    QuestionGenerator.WORD_PROBLEMS_TOPIC: "Teksta uzdevumi",
 }
-TOPIC_BY_LABEL = {label: topic for topic, label in TOPIC_LABELS.items()}
 
 
 class MathTrainerApp:
@@ -51,7 +48,6 @@ class MathTrainerApp:
         self.correct_value_label: ctk.CTkLabel | None = None
         self.remaining_value_label: ctk.CTkLabel | None = None
         self.progress_bar: ctk.CTkProgressBar | None = None
-        self.selected_topic = ctk.StringVar(value=TOPIC_LABELS[QuestionGenerator.MIXED_TOPIC])
 
         self.font_title = ctk.CTkFont(family="Arial", size=32, weight="bold")
         self.font_section = ctk.CTkFont(family="Arial", size=18, weight="bold")
@@ -158,40 +154,6 @@ class MathTrainerApp:
             text_color="#1f2937",
         )
         header.grid(row=0, column=0, sticky="w")
-
-        selector_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
-        selector_frame.grid(row=0, column=1, sticky="e")
-
-        selector_label = ctk.CTkLabel(
-            selector_frame,
-            text="Tēma:",
-            font=self.font_section,
-            text_color="#334155",
-        )
-        selector_label.grid(row=0, column=0, padx=(0, 10))
-
-        topic_selector = ctk.CTkOptionMenu(
-            selector_frame,
-            variable=self.selected_topic,
-            values=[
-                TOPIC_LABELS[QuestionGenerator.ADDITION_TOPIC],
-                TOPIC_LABELS[QuestionGenerator.SUBTRACTION_TOPIC],
-                TOPIC_LABELS[QuestionGenerator.MULTIPLICATION_TOPIC],
-                TOPIC_LABELS[QuestionGenerator.DIVISION_TOPIC],
-                TOPIC_LABELS[QuestionGenerator.MIXED_TOPIC],
-                TOPIC_LABELS[QuestionGenerator.WORD_PROBLEMS_TOPIC],
-            ],
-            command=self._topic_changed,
-            width=210,
-            height=42,
-            corner_radius=16,
-            font=self.font_text,
-            dropdown_font=self.font_text,
-            fg_color="#2563eb",
-            button_color="#1d4ed8",
-            button_hover_color="#1e40af",
-        )
-        topic_selector.grid(row=0, column=1)
 
         progress_frame = ctk.CTkFrame(
             self.root,
@@ -318,14 +280,11 @@ class MathTrainerApp:
         self._update_progress()
 
         difficulty = self.adaptive_engine.get_current_difficulty()
-        selected_topic = self._get_selected_topic()
-        accuracy_by_topic = None
-        if selected_topic == QuestionGenerator.MIXED_TOPIC:
-            accuracy_by_topic = self.database.get_accuracy_by_question_type()
+        accuracy_by_topic = self.database.get_accuracy_by_question_type()
 
         for index in range(QUESTION_COUNT):
             question = self.generator.generate_question(
-                selected_topic,
+                QuestionGenerator.MIXED_TOPIC,
                 difficulty,
                 accuracy_by_topic,
             )
@@ -334,14 +293,6 @@ class MathTrainerApp:
 
         if self.answer_entries:
             self.answer_entries[0][0].focus_set()
-
-    def _topic_changed(self, selected_topic: str) -> None:
-        """Start a fresh page when the selected topic changes."""
-        self.load_next_page()
-
-    def _get_selected_topic(self) -> str:
-        """Return the internal topic name for the selected UI label."""
-        return TOPIC_BY_LABEL[self.selected_topic.get()]
 
     def _add_question_row(self, index: int, question: Question) -> None:
         """Render one question row with answer input and result indicator."""

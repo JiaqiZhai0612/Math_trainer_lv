@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from pathlib import Path
-from random import choice, choices, randint
+from random import choice, choices, randint, random
 
 
 @dataclass(frozen=True)
@@ -28,8 +26,6 @@ class QuestionGenerator:
     MULTIPLICATION_TOPIC = "Multiplication"
     DIVISION_TOPIC = "Division"
     MIXED_TOPIC = "Mixed"
-    WORD_PROBLEMS_TOPIC = "Word Problems"
-    WORD_PROBLEMS_PATH = Path("word_problems.json")
     QUESTION_TYPES = (
         ADDITION_TOPIC,
         SUBTRACTION_TOPIC,
@@ -53,8 +49,6 @@ class QuestionGenerator:
             return self.generate_multiplication_question(difficulty)
         if question_type == self.DIVISION_TOPIC:
             return self.generate_division_question(difficulty)
-        if question_type == self.WORD_PROBLEMS_TOPIC:
-            return self.generate_word_problem(difficulty)
 
         return self.generate_addition_question(difficulty)
 
@@ -76,16 +70,20 @@ class QuestionGenerator:
 
         weights = []
         for topic in self.QUESTION_TYPES:
-            accuracy = float(accuracy_by_topic[topic]["accuracy"])
+            accuracy = float(accuracy_by_topic.get(topic, {}).get("accuracy", 0.0))
             error_rate = 1.0 - accuracy
             weights.append(max(0.1, error_rate))
 
         return choices(self.QUESTION_TYPES, weights=weights, k=1)[0]
 
     def generate_addition_question(self, difficulty: int = 1) -> Question:
-        """Generate an addition question with three-digit numbers."""
-        first_number = randint(100, 999)
-        second_number = randint(100, 999)
+        """Generate addition with required carrying."""
+        require_multiple_carries = random() < 0.4
+        while True:
+            first_number, second_number = self._addition_numbers()
+            carry_count = self._addition_carry_count(first_number, second_number)
+            if carry_count >= 1 and (carry_count >= 2 or not require_multiple_carries):
+                break
 
         return Question(
             prompt=f"{first_number} + {second_number} = ?",
@@ -95,10 +93,39 @@ class QuestionGenerator:
             difficulty=difficulty,
         )
 
+    def _addition_numbers(self) -> tuple[int, int]:
+        """Return numbers matching the requested addition size distribution."""
+        if random() < 0.7:
+            return randint(100, 999), randint(100, 999)
+
+        first_number = randint(1000, 9999)
+        second_number = randint(1000, 9999) if choice((True, False)) else randint(100, 999)
+        return first_number, second_number
+
+    def _addition_carry_count(self, first_number: int, second_number: int) -> int:
+        """Count digit positions where addition creates a carry."""
+        carry = 0
+        carry_count = 0
+        larger_width = max(len(str(first_number)), len(str(second_number)))
+        for _ in range(larger_width):
+            first_digit = first_number % 10
+            second_digit = second_number % 10
+            digit_sum = first_digit + second_digit + carry
+            carry = 1 if digit_sum >= 10 else 0
+            if carry:
+                carry_count += 1
+            first_number //= 10
+            second_number //= 10
+        return carry_count
+
     def generate_subtraction_question(self, difficulty: int = 1) -> Question:
-        """Generate a three-digit subtraction question with no negative answer."""
-        first_number = randint(100, 999)
-        second_number = randint(100, first_number)
+        """Generate subtraction with required borrowing and no negative answer."""
+        require_multiple_borrows = random() < 0.4
+        while True:
+            first_number, second_number = self._subtraction_numbers()
+            borrow_count = self._subtraction_borrow_count(first_number, second_number)
+            if borrow_count >= 1 and (borrow_count >= 2 or not require_multiple_borrows):
+                break
 
         return Question(
             prompt=f"{first_number} - {second_number} = ?",
@@ -108,11 +135,52 @@ class QuestionGenerator:
             difficulty=difficulty,
         )
 
+    def _subtraction_numbers(self) -> tuple[int, int]:
+        """Return numbers matching the requested subtraction size distribution."""
+        if random() < 0.7:
+            first_number = (
+                choice((300, 400, 500, 600, 700, 800, 900))
+                if random() < 0.2
+                else randint(100, 999)
+            )
+            second_number = randint(100, first_number)
+            return first_number, second_number
+
+        first_number = (
+            choice((1000, 2000, 3000, 4000, 5000, 9000))
+            if random() < 0.2
+            else randint(1000, 9999)
+        )
+        second_minimum = 1000 if choice((True, False)) else 100
+        second_number = randint(second_minimum, first_number)
+        return first_number, second_number
+
+    def _subtraction_borrow_count(self, first_number: int, second_number: int) -> int:
+        """Count digit positions where subtraction requires borrowing."""
+        borrow = 0
+        borrow_count = 0
+        larger_width = max(len(str(first_number)), len(str(second_number)))
+        for _ in range(larger_width):
+            first_digit = first_number % 10 - borrow
+            second_digit = second_number % 10
+            if first_digit < second_digit:
+                borrow = 1
+                borrow_count += 1
+            else:
+                borrow = 0
+            first_number //= 10
+            second_number //= 10
+        return borrow_count
+
     def generate_multiplication_question(self, difficulty: int = 1) -> Question:
-        """Generate a multiplication-table question weighted toward 6 to 10."""
-        table_numbers = [1, 2, 3, 4, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10]
-        first_number = choice(table_numbers)
-        second_number = choice(table_numbers)
+        """Generate multiplication weighted toward two-digit by one-digit."""
+        if random() < 0.7:
+            first_number = randint(12, 99)
+            second_number = randint(2, 9)
+        else:
+            weighted_table_numbers = [2, 3, 4, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10]
+            first_number = choice(weighted_table_numbers)
+            second_number = choice(weighted_table_numbers)
 
         return Question(
             prompt=f"{first_number} × {second_number} = ?",
@@ -130,9 +198,9 @@ class QuestionGenerator:
         return self.generate_division_with_remainder_question(difficulty)
 
     def generate_division_without_remainder_question(self, difficulty: int = 1) -> Question:
-        """Generate a division question from the 6 to 10 tables with no remainder."""
-        divisor = randint(6, 10)
-        quotient = randint(6, 10)
+        """Generate an exact division question with a one-digit divisor."""
+        divisor = randint(2, 9)
+        quotient = randint(2, min(99, 999 // divisor))
         dividend = divisor * quotient
 
         return Question(
@@ -144,10 +212,11 @@ class QuestionGenerator:
         )
 
     def generate_division_with_remainder_question(self, difficulty: int = 1) -> Question:
-        """Generate a Grade 3 division question with a small remainder."""
-        divisor = randint(2, 10)
-        quotient = randint(2, 9)
-        remainder = randint(1, min(divisor - 1, 4))
+        """Generate division with a valid non-zero remainder."""
+        divisor = randint(2, 9)
+        remainder = randint(1, divisor - 1)
+        max_quotient = min(99, (999 - remainder) // divisor)
+        quotient = randint(2, max_quotient)
         dividend = divisor * quotient + remainder
 
         return Question(
@@ -158,39 +227,3 @@ class QuestionGenerator:
             difficulty=difficulty,
             remainder_answer=remainder,
         )
-
-    def generate_word_problem(self, difficulty: int = 1) -> Question:
-        """Generate a manually added word problem from word_problems.json."""
-        word_problems = self._load_word_problems()
-        problem = choice(word_problems)
-
-        return Question(
-            prompt=problem["question_text"],
-            correct_answer=int(problem["answer"]),
-            topic=problem["topic"],
-            question_type=self.WORD_PROBLEMS_TOPIC,
-            difficulty=difficulty,
-        )
-
-    def _load_word_problems(self) -> list[dict[str, str | int]]:
-        """Load valid manually added word problems from the local JSON file."""
-        with self.WORD_PROBLEMS_PATH.open("r", encoding="utf-8") as file:
-            loaded_problems = json.load(file)
-
-        valid_problems = []
-        for problem in loaded_problems:
-            required_fields = {"question_text", "answer", "topic", "subtopic"}
-            if not required_fields.issubset(problem):
-                continue
-
-            try:
-                int(problem["answer"])
-            except (TypeError, ValueError):
-                continue
-
-            valid_problems.append(problem)
-
-        if not valid_problems:
-            raise ValueError("word_problems.json does not contain any valid word problems.")
-
-        return valid_problems
